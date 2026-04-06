@@ -302,19 +302,6 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 const btnSAP = document.getElementById("btnSAP");
 const btnContratistas = document.getElementById("btnContratistas");
 const btnTecnicos = document.getElementById("btnTecnicos");
-const buscarTecnicoInput = document.getElementById("buscarTecnicoInput");
-const filtroEstadoTecnico = document.getElementById("filtroEstadoTecnico");
-const filtroContratistaTecnico = document.getElementById("filtroContratistaTecnico");
-
-if (buscarTecnicoInput) {
-  buscarTecnicoInput.addEventListener("input", refrescarListaTecnicos);
-}
-if (filtroEstadoTecnico) {
-  filtroEstadoTecnico.addEventListener("change", refrescarListaTecnicos);
-}
-if (filtroContratistaTecnico) {
-  filtroContratistaTecnico.addEventListener("change", refrescarListaTecnicos);
-}
 
 btnContratistas.addEventListener("click", () => {
   if (!contratistasVisible) {
@@ -430,21 +417,28 @@ document.getElementById("btnSED").addEventListener("click", () => {
 const usuarios = [{ user: "despachobt", pass: "Pluz2025" }];
 
 function login() {
-  document.getElementById("loginMsg").textContent = "";
-  document.getElementById("loginScreen").style.display = "none";
+  const u = document.getElementById("user").value.trim();
+  const p = document.getElementById("pass").value.trim();
+  const loginMsg = document.getElementById("loginMsg");
+  const loginScreen = document.getElementById("loginScreen");
+
+  const ok = usuarios.find(x => x.user === u && x.pass === p);
+
+  loginMsg.textContent = ok ? "" : "❌ Usuario o contraseña incorrectos";
+  if (ok) loginScreen.style.display = "none";
 }
 const urls = [
   {nombre:"NORTE CHICO",url:"https://dl.dropboxusercontent.com/scl/fi/gq78aaeeowpllmk6aq6u8/NORTE-CHICO.csv?rlkey=amoh5m764nbkoobv8tggbbmhb"},
   {nombre:"COLONIAL",url:"https://dl.dropboxusercontent.com/scl/fi/mo1wrl48ky5v74l3ybfpd/COLONIAL.csv?rlkey=jhcfg302k4re8lnp5aya8o02n"},
   {nombre:"PANAMERICANA",url:"https://dl.dropboxusercontent.com/scl/fi/qpt0c6dqyhututunxgby5/PANAMERICANA.csv?rlkey=gtkcg709xhcohqdu70v8fzo16"}
 ];
+const sidebar = document.getElementById("sidebar");
 const progreso = document.getElementById("progreso");
 const progresoBox = document.getElementById("progresoBox");
-const sidebar = document.getElementById("sidebar");
 
+const searchBox = document.getElementById("searchBox");
 const resultado = document.getElementById("resultado");
 const verEnGoogle = document.getElementById("verEnGoogle");
-const searchBox = document.getElementById("searchBox");
 
 const searchSED = document.getElementById("searchSED");
 const resultadoSED = document.getElementById("resultadoSED");
@@ -480,11 +474,9 @@ const zonaAContratista = {
   "PUEBLO LIBRE": "PA",
 
   // DOMINION
-  "SMP NORTE": "DOMINION",
   "MORALES DUAREZ SUR": "DOMINION",
   "GAMBETA": "DOMINION",
   "CALLAO": "DOMINION",
-  "SMP CENTRO": "DOMINION",
   "SARITA COLONIA": "DOMINION",
   "BELLAVISTA-LA PERLA": "DOMINION",
   "SMP SUR": "DOMINION",
@@ -502,6 +494,8 @@ const zonaAContratista = {
 
   // COBRA
   "COMAS COLLIQUE": "COBRA",
+"SMP NORTE": "COBRA",
+"SMP CENTRO": "COBRA",
   "COMAS EL PINAR": "COBRA",
   "PUENTE PIEDRA SUR": "COBRA",
   "COMAS SUR": "COBRA",
@@ -1027,6 +1021,20 @@ const cumpleTexto =
   });
 }
 
+const buscarTecnicoInput = document.getElementById("buscarTecnicoInput");
+const filtroEstadoTecnico = document.getElementById("filtroEstadoTecnico");
+const filtroContratistaTecnico = document.getElementById("filtroContratistaTecnico");
+
+if (buscarTecnicoInput) {
+  buscarTecnicoInput.addEventListener("input", refrescarListaTecnicos);
+}
+if (filtroEstadoTecnico) {
+  filtroEstadoTecnico.addEventListener("change", refrescarListaTecnicos);
+}
+if (filtroContratistaTecnico) {
+  filtroContratistaTecnico.addEventListener("change", refrescarListaTecnicos);
+}
+
 // 📏 DISTANCIA (metros)
 function distancia(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -1404,8 +1412,13 @@ function copiarSAP(sap) {
   });
 }
 function filtrarSAP() {
-  const desde = document.getElementById("sapDesde").value;
-  const hasta = document.getElementById("sapHasta").value;
+  const desdeInput = document.getElementById("sapDesde");
+  const hastaInput = document.getElementById("sapHasta");
+
+  if (!desdeInput || !hastaInput) return;
+
+  const desde = desdeInput.value;
+  const hasta = hastaInput.value;
 
   capaSAP.clearLayers();
 
