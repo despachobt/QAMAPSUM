@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<title>Buscador de Suministros</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+<style>
+ body { margin: 0; height: 100vh; display: flex; overflow: hidden; }
+  #sidebar { width: 320px; background: #f8f9fa; padding: 15px; overflow-y: auto; transition: all 0.3s ease; }
+  #sidebar.hidden { transform: translateX(-100%); }
+  #map { flex: 1; }
+  .fade-in { animation: fadeIn 0.5s ease-in-out; }
+  @keyframes fadeIn { from {opacity:0;} to {opacity:1;} }
+  .toggle-btn { position: absolute; top: 10px; left: 10px; z-index: 1000; }
+  #loginScreen {
+    position: fixed; top:0; left:0; width:100%; height:100%; 
+    background: rgba(0,0,0,0.7); display:flex; justify-content:center; align-items:center;
+    z-index:2000;
+  }
+  #loginBox {
+    background:white; padding:20px; border-radius:8px; width:300px; text-align:center;
+  }
+  #loginBox img { width: 120px; margin-bottom: 15px; }
+
+  /* Panel derecho de atenciones */
+  #panelAtenciones {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 350px;
+  height: 100%;
+  background: #ffffff;
+  border-left: 2px solid #ddd;
+  overflow-y: auto;
+  padding: 15px;
+  z-index: 1500;
+
+  /* animación */
+  transform: translateX(100%);
+  transition: transform 0.4s ease-in-out;
+}
+
+/* Cuando está visible */
+#panelAtenciones.visible {
+  transform: translateX(0);
+}
+.sed-label {
+  font-size: 12px;
+  color: #0d6efd; /* azul */
+  font-weight: 600;
+  text-shadow: 1px 1px 2px white;
+  pointer-events: none; /* evita bloquear clics */
+  text-align: center;
+}
+input[type=range] {
+  accent-color: #0d6efd; /* azul bootstrap */
+}
+/* 🔶 ICONO SAP */
+.sap-icon {
+  font-size: 34px;
+  filter: drop-shadow(0 0 4px orange);
+  cursor: pointer;
+}
+/* Panel flotante herramientas */
+#panelHerramientas {
+  position: absolute;
+  left: 340px;
+  bottom: 120px;
+  width: 300px;
+  background: #ffffff;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  padding: 15px;
+  z-index: 1500;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(10px);
+  transition: all 0.3s ease-in-out;
+}
+
+#panelHerramientas.visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+</style>
+</head>
+<body>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<div id="loginScreen">
+  <div id="loginBox">
+    <img src="https://dl.dropboxusercontent.com/scl/fi/a2xxg9id8bd8thsgct4bd/PLUZ-NAVIDAD.jpg?rlkey=mn9r5p4yosr6oe30lr03xhuk1" alt="Logo Pluz">
+    <h4 class="mb-3">🔐 Iniciar sesión</h4>
+    <div class="mb-2"><input type="text" id="user" class="form-control" placeholder="Usuario"></div>
+    <div class="mb-2"><input type="password" id="pass" class="form-control" placeholder="Contraseña"></div>
+    <button class="btn btn-primary w-100" onclick="login()">Ingresar</button>
+    <div id="loginMsg" class="text-danger mt-2"></div>
+  </div>
+</div>
+
+<button class="btn btn-primary toggle-btn" onclick="toggleSidebar()">☰</button>
+
+<div id="sidebar">
+  <h4>🧭 Buscador general</h4>
+<div id="progresoBox" class="mb-3">
+  <div class="progress">
+    <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" 
+         role="progressbar" style="width: 0%">0%</div>
+  </div>
+  <ul id="progreso" class="list-group small mt-2"></ul>
+</div>
+  <!-- Selector de modo -->
+  <div class="mb-3">
+    <label for="modoBusqueda" class="form-label">Selecciona tipo de búsqueda:</label>
+    <select id="modoBusqueda" class="form-select" onchange="cambiarModoBusqueda()">
+      <option value="suministro" selected>🔎 Suministro</option>
+      <option value="sed">📡 SED</option>
+      <option value="coordenadas">📍 Coordenadas</option>
+    </select>
+  </div>
+
+  <!-- Controles generales -->
+  <div class="mb-3">
+    <label for="radioInput" class="form-label">
+  🎯 Radio de búsqueda: <b><span id="radioLabel">20</span> m</b>
+</label>
+
+<input type="range" id="radioInput"
+       class="form-range"
+       min="5" max="200" step="5" value="20">
+</div>
+<!-- 🔹 BLOQUE SUMINISTRO -->
+  <div id="bloqueSuministro">
+    <h5>🔎 Buscar suministro</h5>
+    <div class="input-group mb-2">
+      <input type="text" id="searchBox" class="form-control" placeholder="Número de cliente">
+      <button class="btn btn-success" onclick="buscarSuministro()">Buscar</button>
+    </div>
+    <div id="resultado" class="text-success mb-2"></div>
+    <button id="verEnGoogle" class="btn btn-outline-primary btn-sm mb-3" style="display:none" onclick="abrirEnGoogleMaps()">Ver en Google Maps</button>
+    <h6>📍 Suministros cercanos:</h6>
+    <ul id="cercanos" class="list-group small mb-3"></ul>
+  </div>
+
+  <!-- 🔹 BLOQUE SED -->
+  <div id="bloqueSED" style="display:none;">
+    <h5>📡 Buscar SED</h5>
+    <div class="input-group mb-2">
+      <input type="text" id="searchSED" class="form-control" placeholder="Nombre de SED">
+      <button class="btn btn-warning" onclick="buscarSED()">Buscar</button>
+    </div>
+    <div id="resultadoSED" class="text-primary mb-2"></div>
+    <button id="verEnGoogleSED" class="btn btn-outline-warning btn-sm mb-3" style="display:none" onclick="abrirEnGoogleMapsSED()">Ver en Google Maps</button>
+    <h6>📍 Suministros cercanos:</h6>
+    <ul id="cercanosSED" class="list-group small mb-3"></ul>
+  </div>
+
+  <!-- 🔹 BLOQUE COORDENADAS -->
+  <div id="bloqueCoord" style="display:none;">
+    <h5>📍 Buscar por coordenadas</h5>
+    <div class="input-group mb-2">
+      <input type="text" id="coordInput" class="form-control" placeholder="Ej: -11.872993, -77.114656">
+      <button class="btn btn-info" onclick="buscarPorCoordenadas()">Buscar</button>
+    </div>
+    <div id="resultadoCoord" class="text-primary small mb-2"></div>
+    <h6>📍 Suministros cercanos:</h6>
+    <ul id="cercanosCoord" class="list-group small mb-3"></ul>
+  </div>
+  
+  <!-- Historial -->
+  <h6> </h6>
+  <ul id="historial" class="list-group small mb-3"></ul>
+</div>
+
+<button class="btn btn-secondary" id="toggleAtencionesBtn" 
+        style="position:absolute; bottom:20px; right:20px; z-index:1600;">
+  📋 Atenciones
+</button>
+<button class="btn btn-primary" id="toggleHerramientasBtn"
+        style="position:absolute; bottom:70px; left:340px; z-index:1600;">
+  🛠️ Herramientas
+</button>
+<div id="panelHerramientas">
+  <h5>🛠️ Herramientas del mapa</h5>
+
+  <div class="card mb-3">
+    <div class="card-body p-2">
+      <h6 class="mb-2">👷 Técnicos conectados</h6>
+
+      <input type="text" id="buscarTecnicoInput" class="form-control form-control-sm mb-2"
+             placeholder="Buscar por nombre o usuario">
+
+      <select id="filtroEstadoTecnico" class="form-select form-select-sm mb-2">
+        <option value="todos">Todos los estados</option>
+        <option value="Activo">Activos</option>
+        <option value="Sin señal">Sin señal</option>
+        <option value="Detenido">Detenidos</option>
+      </select>
+
+      <select id="filtroContratistaTecnico" class="form-select form-select-sm mb-2">
+        <option value="todos">Todas las contratistas</option>
+        <option value="LARI">LARI</option>
+        <option value="COBRA">COBRA</option>
+        <option value="DOMINION">DOMINION</option>
+        <option value="PA">PA</option>
+        <option value="INMEL">INMEL</option>
+      </select>
+
+      <div id="contadorTecnicos" class="small text-muted mb-2">0 técnicos</div>
+
+      <div id="listaTecnicosFiltrados" class="list-group small"
+           style="max-height:220px; overflow-y:auto;"></div>
+    </div>
+  </div>
+
+  <button id="btnSAP" class="btn btn-warning btn-sm w-100 mb-2">
+    🧾 Mostrar SAP
+  </button>
+
+  <button id="btnSED" class="btn btn-primary btn-sm w-100 mb-2">
+    📡 Mostrar SEDs
+  </button>
+<button id="btnContratistas" class="btn btn-dark btn-sm w-100 mb-2">
+    🗺️ Zonas contratistas
+  </button>
+
+<button id="btnTecnicos" class="btn btn-success btn-sm w-100 mb-2">
+  👷 Mostrar técnicos
+</button>
+
+  <button id="btnComparar" class="btn btn-danger btn-sm w-100">
+    📏 Comparar distancia
+  </button>
+</div>
+<div id="panelAtenciones">
+  <h5>📋 Atenciones del suministro</h5>
+<button class="btn btn-success btn-sm mb-3 w-100"
+        onclick="exportarAtencionesExcel()">
+  📥 Exportar a Excel
+</button>
+  <ul id="listaAtenciones" class="list-group"></ul>
+</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script>
+let datos = [], sedDatos = [], historial = [], cercanosMarkers = [], atenciones = [];
+const RADIO_VISUAL_SAP = 1000; // metros
+const RADIO_VISUAL_SED = 1000; // metros
+// ============================
+// 📏 COMPARAR DISTANCIAS
+// ============================
+let modoComparar = false;
+let puntosComparar = [];
+let capaComparacion = L.layerGroup();
+let ultimoEncontro = null, ultimaSED = null, map, marker;
+let sedLayer = L.layerGroup();
+let sedVisible = false;
+let capaContratistas = L.layerGroup();
+let contratistasVisible = false;
+let cargados = 0, datosListos = false;
+let clienteActualAtenciones = null;
+// ============================
+// 👷 CAPA TÉCNICOS
+// ============================
+let capaTecnicos = L.layerGroup();
+let tecnicosVisible = false;
+let markersTecnicos = {};
+let tecnicosData = {};
+
+// ============================
+// 🔶 CAPA SAP (OCULTA)
+// ============================
+let mapaSAP = {};              // cliente -> SAP
+let capaSAP = L.layerGroup();  // capa Leaflet
+let sapVisible = false;
+
+// 🔶 ICONO SAP 
+const iconoSAP = L.divIcon({
+  className: "sap-icon",
+  html: "💡",
+  iconSize: [36, 36],
+  iconAnchor: [18, 18],
+  popupAnchor: [0, -18]
+});
+
+// Inicializa mapa
+map = L.map('map').setView([-11.95, -76.95], 8);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: 'Map data © OpenStreetMap contributors'
+}).addTo(map);
+// ============================
+// 🔶 BOTÓN MOSTRAR / OCULTAR SAP
+// ============================
+// ============================
+// 🔶 BOTÓN MOSTRAR / OCULTAR SAP
+// ============================
+const btnSAP = document.getElementById("btnSAP");
+const btnContratistas = document.getElementById("btnContratistas");
+const btnTecnicos = document.getElementById("btnTecnicos");
+const buscarTecnicoInput = document.getElementById("buscarTecnicoInput");
+const filtroEstadoTecnico = document.getElementById("filtroEstadoTecnico");
+const filtroContratistaTecnico = document.getElementById("filtroContratistaTecnico");
+
+if (buscarTecnicoInput) {
+  buscarTecnicoInput.addEventListener("input", refrescarListaTecnicos);
+}
+if (filtroEstadoTecnico) {
+  filtroEstadoTecnico.addEventListener("change", refrescarListaTecnicos);
+}
+if (filtroContratistaTecnico) {
+  filtroContratistaTecnico.addEventListener("change", refrescarListaTecnicos);
+}
+
+btnContratistas.addEventListener("click", () => {
+  if (!contratistasVisible) {
+    map.addLayer(capaContratistas);
+    btnContratistas.textContent = "❌ Ocultar contratistas";
+  } else {
+    map.removeLayer(capaContratistas);
+    btnContratistas.textContent = "🗺️ Zonas contratistas";
+  }
+  contratistasVisible = !contratistasVisible;
+});
+
+btnTecnicos.addEventListener("click", () => {
+  if (!tecnicosVisible) {
+    map.addLayer(capaTecnicos);
+    btnTecnicos.textContent = "❌ Ocultar técnicos";
+  } else {
+    map.removeLayer(capaTecnicos);
+    btnTecnicos.textContent = "👷 Mostrar técnicos";
+  }
+
+  tecnicosVisible = !tecnicosVisible;
+});
+
+btnSAP.addEventListener("click", () => {
+  if (!sapVisible) {
+    map.addLayer(capaSAP);
+    btnSAP.textContent = "❌ Ocultar SAP";
+  } else {
+    map.removeLayer(capaSAP);
+    btnSAP.textContent = "🧾 Mostrar SAP";
+  }
+
+  sapVisible = !sapVisible;
+});
+
+// ============================
+// 🔷 BOTÓN MOSTRAR / OCULTAR SEDs
+// ============================
+// 🔷 BOTÓN COMPARAR DISTANCIA
+document.getElementById("btnComparar").addEventListener("click", () => {
+  modoComparar = !modoComparar;
+  puntosComparar = [];
+  capaComparacion.clearLayers();
+
+  if (modoComparar) {
+    capaComparacion.addTo(map);
+    alert("📏 Modo comparación activo. Selecciona dos puntos.");
+  } else {
+    map.removeLayer(capaComparacion);
+  }
+});
+
+// 🔷 BOTÓN MOSTRAR / OCULTAR SEDs
+document.getElementById("btnSED").addEventListener("click", () => {
+  const btn = document.getElementById("btnSED");
+
+  if (!sedVisible) {
+    sedLayer.clearLayers();
+
+    if (!ultimoEncontro && !ultimaSED) {
+      alert("⚠️ Primero busca un suministro o una SED");
+      return;
+    }
+
+    const ref = ultimoEncontro || ultimaSED;
+    const latRef = ref.lat;
+    const lonRef = ref.lon;
+
+    sedDatos.forEach(obj => {
+      const dMetros = distancia(latRef, lonRef, obj.lat, obj.lon);
+      if (dMetros > RADIO_VISUAL_SED) return;
+
+      // 🔹 Rectángulo SED
+      const rect = L.rectangle(
+        [
+          [obj.lat - 0.00005, obj.lon - 0.00005],
+          [obj.lat + 0.00005, obj.lon + 0.00005]
+        ],
+        { color: "blue", weight: 1, fillOpacity: 0.6 }
+      ).bindTooltip(`SED: ${obj.sed}<br>ALIM: ${obj.alim}`);
+
+      sedLayer.addLayer(rect);
+
+      // 🔹 Etiqueta con nombre de SED
+      const labelIcon = L.divIcon({
+        className: "sed-label",
+        html: `<div>${obj.sed}</div>`,
+        iconSize: [90, 20],
+        iconAnchor: [45, -12]
+      });
+
+      const labelMarker = L.marker([obj.lat, obj.lon], {
+        icon: labelIcon,
+        interactive: false
+      });
+
+      sedLayer.addLayer(labelMarker);
+    });
+
+    map.addLayer(sedLayer);
+    btn.textContent = "❌ Ocultar SEDs";
+
+  } else {
+    map.removeLayer(sedLayer);
+    btn.textContent = "📡 Mostrar SEDs";
+  }
+
+  sedVisible = !sedVisible;
+});
+
+
+const usuarios = [{ user: "despachobt", pass: "Pluz2025" }];
+
+function login() {
+ alert("botón sí está funcionando");
+  const u = document.getElementById("user").value.trim();
+  const p = document.getElementById("pass").value.trim();
+  const loginMsg = document.getElementById("loginMsg");
+  const loginScreen = document.getElementById("loginScreen");
+
+  const ok = usuarios.find(x => x.user === u && x.pass === p);
+
+  loginMsg.textContent = ok ? "" : "❌ Usuario o contraseña incorrectos";
+  if (ok) loginScreen.style.display = "none";
+}
+
+const urls = [
+  {nombre:"NORTE CHICO",url:"https://dl.dropboxusercontent.com/scl/fi/gq78aaeeowpllmk6aq6u8/NORTE-CHICO.csv?rlkey=amoh5m764nbkoobv8tggbbmhb"},
+  {nombre:"COLONIAL",url:"https://dl.dropboxusercontent.com/scl/fi/mo1wrl48ky5v74l3ybfpd/COLONIAL.csv?rlkey=jhcfg302k4re8lnp5aya8o02n"},
+  {nombre:"PANAMERICANA",url:"https://dl.dropboxusercontent.com/scl/fi/qpt0c6dqyhututunxgby5/PANAMERICANA.csv?rlkey=gtkcg709xhcohqdu70v8fzo16"}
+];
+// ============================
+// ============================
+// 🎨 COLORES POR CONTRATISTA
+// ============================
+const coloresContratistas = {
+  "DOMINION": "#8e44ad",
+  "COBRA": "#5D4037",
+  "LARI": "#27ae60",
+  "PA": "#f39c12",
+  "INMEL": "#c0392b"
+};
+
+// ============================
+// 🧩 RELACIÓN ZONA → CONTRATISTA
+// ============================
+const zonaAContratista = {
+  // PA
+  "BARRIOS ALTOS": "PA",
+  "SAN ISIDRO": "PA",
+  "CHACRA RIOS": "PA",
+  "JESUS MARIA": "PA",
+  "SAN MIGUEL": "PA",
+  "CARCAMO": "PA",
+  "CENTRO HISTORICO": "PA",
+  "PUEBLO LIBRE": "PA",
+
+  // DOMINION
+  "SMP NORTE": "DOMINION",
+  "MORALES DUAREZ SUR": "DOMINION",
+  "GAMBETA": "DOMINION",
+  "CALLAO": "DOMINION",
+  "SMP CENTRO": "DOMINION",
+  "SARITA COLONIA": "DOMINION",
+  "BELLAVISTA-LA PERLA": "DOMINION",
+  "SMP SUR": "DOMINION",
+  "VENTANILLA": "DOMINION",
+  "SAN JOSE": "DOMINION",
+
+  // LARI
+  "RIMAC": "LARI",
+  "EL AGUSTINO": "LARI",
+  "SJL NORTE": "LARI",
+  "JICAMARCA": "LARI",
+  "LOS OLIVOS": "LARI",
+  "INDEPENDENCIA": "LARI",
+  "SJL SUR": "LARI",
+
+  // COBRA
+  "COMAS COLLIQUE": "COBRA",
+  "COMAS EL PINAR": "COBRA",
+  "PUENTE PIEDRA SUR": "COBRA",
+  "COMAS SUR": "COBRA",
+  "PUENTE PIEDRA NORTE": "COBRA",
+  "PUENTE PIEDRA CENTRO": "COBRA",
+  "CANTA CARABAYLLO": "COBRA",
+  "CARABAYLLO": "COBRA",
+  "COMAS CENTRO": "COBRA",
+  "ANCON": "COBRA",
+  "PACHACUTEC": "COBRA"
+};
+function actualizarProgreso() {
+  cargados++;
+  const bar = document.getElementById("progress-bar");
+  const porcentaje = Math.round((cargados / urls.length) * 100);
+
+  bar.style.width = porcentaje + "%";
+  bar.textContent = porcentaje + "%";
+
+  if (cargados === urls.length) {
+    datosListos = true;
+    bar.classList.remove("progress-bar-animated");
+
+    const li = document.createElement("li");
+    li.className = "list-group-item text-success";
+    li.textContent = "✅ Todos los archivos cargados con éxito.";
+    progreso.appendChild(li);
+
+    setTimeout(() => {
+      progresoBox.style.display = "none";
+    }, 2000);
+  }
+}
+// Cargar suministros
+urls.forEach(f=>{
+  fetch(f.url).then(r=>r.text()).then(texto=>{
+    const lineas=texto.split("\n");
+    lineas.slice(1).forEach(l=>{
+      const cols=l.trim().split(";");
+      if(cols.length>=4){
+        datos.push({
+          cliente: cols[0].trim().replace(/^0+/, ""),
+          ut:cols[1].trim(),
+          lat:parseFloat(cols[2].replace(",", ".")),
+          lon:parseFloat(cols[3].replace(",", "."))
+        });
+      }
+    });
+    actualizarProgreso();
+    const li=document.createElement("li");
+    li.className="list-group-item";
+    li.textContent=`${f.nombre}: ${lineas.length} filas cargadas`;
+    progreso.appendChild(li);
+  }).catch(()=>{
+    const li=document.createElement("li");
+    li.className="list-group-item text-danger";
+    li.textContent="❌ Error al cargar "+f.nombre;
+    progreso.appendChild(li);
+  });
+});
+
+// Cargar SEDs (inicialmente ocultas)
+fetch("https://dl.dropboxusercontent.com/scl/fi/f27szlfjhlid5luse9j7y/SED.csv?rlkey=kmmfa1sawvl73b2wcdn2exrg4")
+  .then(r=>r.text())
+  .then(texto=>{
+    const lineas=texto.trim().split(/\r?\n/);
+    lineas.slice(1).forEach(l=>{
+      const cols=l.split(",");
+      if(cols.length>=7){
+        const obj={
+          sed:cols[0].trim().toUpperCase(),
+          alim:cols[1].trim(),
+          clientesBT:cols[2].trim(),
+          tipo:cols[3].trim(),
+          ut:cols[4].trim(),
+          lon:parseFloat(cols[5].replace(",", ".").trim()),
+          lat:parseFloat(cols[6].replace(",", ".").trim())
+        };
+        sedDatos.push(obj);
+       // 🔹 Crear el rectángulo azul de la SED
+const mark = L.rectangle(
+  [[obj.lat - 0.00005, obj.lon - 0.00005], [obj.lat + 0.00005, obj.lon + 0.00005]],
+  { color: "blue", weight: 1, fillOpacity: 0.6 }
+).bindTooltip(`SED: ${obj.sed}<br>ALIM: ${obj.alim}<br>UT: ${obj.ut}`);
+sedLayer.addLayer(mark);
+mark.on("click", () => {
+  registrarComparacion(obj.lat, obj.lon, "SED");
+});
+// 🔹 Agregar etiqueta fija debajo de la SED
+const labelIcon = L.divIcon({
+  className: "sed-label",
+  html: `<div>${obj.sed}</div>`,
+  iconSize: [80, 20],
+  iconAnchor: [40, -10] // ajusta altura bajo el rectángulo
+});
+const labelMarker = L.marker([obj.lat, obj.lon], { icon: labelIcon, interactive: false });
+sedLayer.addLayer(labelMarker);
+      }
+    });
+  });
+// ============================
+// 🗺️ CARGAR MAPA CONTRATISTAS
+// ============================
+fetch("https://dl.dropboxusercontent.com/scl/fi/l4ib13fyeabtzg3oold5j/MAPA-CONTRATISTAS.json?rlkey=trbh0ditzueo83k42fm1w27ug")
+  .then(r => r.json())
+  .then(geojson => {
+
+  const layer = L.geoJSON(geojson, {
+    style: feature => {
+      const zona = feature.properties.name?.toUpperCase() || "";
+      const contratista = zonaAContratista[zona] || "SIN ASIGNAR";
+
+      return {
+        color: coloresContratistas[contratista] || "#7f8c8d",
+        weight: 2,
+        fillOpacity: 0.25
+      };
+    },
+
+    onEachFeature: (feature, layer) => {
+      const zona = feature.properties.name || "—";
+      const contratista = zonaAContratista[zona.toUpperCase()] || "SIN ASIGNAR";
+
+      layer.bindTooltip(
+        `<b>Zona:</b> ${zona}<br><b>Contratista:</b> ${contratista}`,
+        { sticky: true }
+      );
+    }
+  });
+
+  capaContratistas.addLayer(layer);
+  console.log("✅ Zonas de contratistas cargadas correctamente");
+
+})
+
+// --- CARGAR ATENCIONES DE 2024 Y 2025 ---
+const urlsAtenciones = [
+  "https://dl.dropboxusercontent.com/scl/fi/wmk8o9eexfkatckqghzp9/ATENCIONDEF.csv?rlkey=9d3y1vv1laf4e5upznta16b3s", // 2025
+  "https://dl.dropboxusercontent.com/scl/fi/fjtukk004juggluv64m4j/ATENCION2024.csv?rlkey=v3a8g97dyleyi21f57xz8jgzl&st=vtfp9g5r" // 2024
+];
+
+Promise.all(urlsAtenciones.map(url => fetch(url).then(r => r.text())))
+  .then(respuestas => {
+    respuestas.forEach((texto, idx) => {
+      const lineas = texto.trim().split(/\r?\n/);
+      lineas.slice(1).forEach(l => {
+        const cols = l.split(";");
+        if (cols.length >= 8) {
+          const ticket = cols[0].replace(/"/g, "").trim();
+          const tipoTrabajo = cols[1].replace(/"/g, "").trim();
+          const tipo = cols[2].replace(/"/g, "").trim();
+          const fecha = cols[3].replace(/"/g, "").trim();
+          const alim = cols[4].replace(/"/g, "").trim();
+          const sed = cols[5].replace(/"/g, "").trim();
+          const cliente = cols[7].replace(/"/g, "").trim();
+          if (cliente) {
+            atenciones.push({
+              ticket,
+              tipo: `${tipoTrabajo} - ${tipo}`,
+              fecha,
+              alim,
+              sed,
+              cliente,
+              fuente: idx === 0 ? "2025" : "2024"
+            });
+          }
+        }
+      });
+    });
+    console.log("✅ Archivos de atenciones combinados:", atenciones.length, "registros totales");
+  })
+  .catch(err => console.error("❌ Error al cargar archivos de atenciones:", err));
+
+// ============================
+// 🔹 CARGAR CLIENTES CADE1 Y CADE2
+// ============================
+let mapaClientes = {};
+
+Promise.all([
+  fetch("https://dl.dropboxusercontent.com/scl/fi/xmyi6f2rq043o5wppqaav/CLIENTES-CADE1.csv?rlkey=fd3etny0fp9no9083wt7w6lmb&st=1wzt8eo6").then(r => r.text()),
+  fetch("https://dl.dropboxusercontent.com/scl/fi/mdgj2b4eb82sibsc1vehk/CLIENTES-CADE2.csv?rlkey=oacn2n4qgqte8wv3cluqmyi8k&st=nb6tpxnk").then(r => r.text())
+])
+.then(([cade1Text, cade2Text]) => {
+  const parseCSV = (txt) =>
+    txt
+      .trim()
+      .split(/\r?\n/)
+      .slice(1)
+      .map(l => {
+        const cols = l.split(",");
+        return {
+          CLIENTE: cols[0]?.trim().replace(/"/g, ""),
+          ALIMCD: cols[1]?.trim().replace(/"/g, "")
+        };
+      })
+      .filter(c => c.CLIENTE);
+
+  const cade1 = parseCSV(cade1Text);
+  const cade2 = parseCSV(cade2Text);
+  const todos = [...cade1, ...cade2];
+
+  todos.forEach(c => {
+    mapaClientes[c.CLIENTE] = c.ALIMCD || "No disponible";
+  });
+
+  console.log("✅ CLIENTES-CADE cargados correctamente:", Object.keys(mapaClientes).length);
+// ============================
+// 🔶 CARGAR SAP DESDE GOOGLE SHEETS
+// ============================
+fetch("https://docs.google.com/spreadsheets/d/1O00gmsXQH1_Q_wf1s7Cb5trM1HESBAT7NlaD9XnHaOA/gviz/tq?tqx=out:csv&sheet=SAP")
+  .then(r => r.text())
+  .then(texto => {
+  const lineas = texto.trim().split(/\r?\n/);
+
+  lineas.slice(1).forEach(l => {
+    const cols = l.split(",");
+
+    const sap = cols[0]?.replace(/"/g,"").trim();        // A
+    const fechaRegistro = cols[1]?.replace(/"/g,"").trim(); // B
+    const motivo = cols[4]?.replace(/"/g,"").trim();    // E
+    const estado = cols[5]?.replace(/"/g,"").trim();    // F
+    const cliente = cols[8]?.replace(/"/g,"").trim().replace(/^0+/,""); // I
+    const fechaAtencion = cols[45]?.replace(/"/g,"").trim(); // AT
+
+    if (cliente && sap) {
+      mapaSAP[cliente] = {
+        sap,
+        motivo,
+        estado,
+        fechaRegistro,
+        fechaAtencion
+      };
+    }
+  });
+
+    console.log("✅ SAP cargados:", Object.keys(mapaSAP).length);
+
+    crearCapaSAP(); // 🔶 dibujar SAP
+  })
+  .catch(err => console.error("❌ Error al cargar SAP:", err));
+})
+.catch(err => console.error("❌ Error al cargar CLIENTES-CADE:", err));
+// ============================
+// 🔶 ESTILO SAP
+// ============================
+const estiloSAP = {
+  radius: 7,
+  color: "#ff7a00",
+  weight: 2,
+  fillColor: "#ffb74d",
+  fillOpacity: 0.9
+};
+
+function crearCapaSAP() {
+  capaSAP.clearLayers();
+  if (!ultimoEncontro && !ultimaSED) return;
+
+  const ref = ultimoEncontro || ultimaSED;
+  const latRef = ref.lat;
+  const lonRef = ref.lon;
+
+  datos.forEach(d => {
+    const info = mapaSAP[d.cliente];
+    if (!info) return;
+
+    const dMetros = distancia(latRef, lonRef, d.lat, d.lon);
+    if (dMetros > RADIO_VISUAL_SAP) return;
+
+    const popupSAP = `
+      <b>💡 SAP ${info.sap}</b><br>
+      🧾 ${info.motivo || "—"}<br>
+      📌 ${info.estado || "—"}<br>
+      <button class="btn btn-sm btn-warning mt-2"
+        onclick="copiarSAP('${info.sap}')">
+        📋 Copiar SAP
+      </button>
+    `;
+
+    const marker = L.marker([d.lat, d.lon], { icon: iconoSAP })
+      .bindPopup(popupSAP);
+
+    capaSAP.addLayer(marker);
+  });
+}
+// --- FUNCIONES ---
+function mostrarAtenciones(clienteID){
+  const lista=document.getElementById("listaAtenciones");
+  const panel=document.getElementById("panelAtenciones");
+  lista.innerHTML="";
+  panel.classList.add("visible");
+
+  const idLimpio = clienteID.trim().replace(/"/g,"");
+
+  // 🔹 GUARDAR CLIENTE ACTUAL
+  clienteActualAtenciones = idLimpio;
+
+  const misAtenciones = atenciones.filter(a => a.cliente === idLimpio);
+
+  if(misAtenciones.length===0){
+    lista.innerHTML=`<li class="list-group-item text-muted">Sin atenciones registradas para ${idLimpio}</li>`;
+    return;
+  }
+
+misAtenciones.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).forEach(a => {
+  const li = document.createElement("li");
+  li.className = "list-group-item mb-2";
+
+  // --- 🔹 Formatear fecha como dd/mm/aaaa ---
+  let fechaFormateada = a.fecha;
+  const fechaObj = new Date(a.fecha);
+  if (!isNaN(fechaObj)) {
+    const dia = String(fechaObj.getDate()).padStart(2, "0");
+    const mes = String(fechaObj.getMonth() + 1).padStart(2, "0");
+    const anio = fechaObj.getFullYear();
+    fechaFormateada = `${dia}/${mes}/${anio}`;
+  }
+
+  li.innerHTML = `
+    🧾 <b>${a.ticket}</b><br>
+    🛠️ <b>Tipo:</b> ${a.tipo}<br>
+    📅 <b>Fecha:</b> ${fechaFormateada}<br>
+    ⚡ <b>Alim:</b> ${a.alim}<br>
+    🏷️ <b>SED:</b> ${a.sed}
+  `;
+  lista.appendChild(li);
+});
+}
+
+// Actualizar mapa / marcador principal
+function actualizarMapa(lat,lon,encontrado){
+  if(marker) map.removeLayer(marker);
+
+  marker = L.marker([lat,lon],{
+    title:"Cliente "+(encontrado.cliente||"")
+  }).addTo(map);
+
+  marker.bindTooltip(
+    `Cliente: ${encontrado.cliente}<br>UT: ${encontrado.ut}`
+  ).openTooltip();
+
+  // 📏 COMPARAR DISTANCIA
+  marker.on("click", () => {
+  registrarComparacion(
+    lat,
+    lon,
+    "Suministro",
+    encontrado.cliente
+  );
+});
+  map.setView([lat,lon],17,{animate:true});
+}
+// Abrir en Google Maps
+function abrirEnGoogleMaps(){ if(ultimoEncontro){ window.open(`https://www.google.com/maps/search/?api=1&query=${ultimoEncontro.lat},${ultimoEncontro.lon}`,'_blank'); }}
+function abrirEnGoogleMapsSED(){ if(ultimaSED){ window.open(`https://www.google.com/maps/search/?api=1&query=${ultimaSED.lat},${ultimaSED.lon}`,'_blank'); }}
+function toggleSidebar(){ sidebar.classList.toggle("hidden"); }
+</script>
+<script>
+// --- FUNCION AUXILIAR: calcular distancia (en metros aprox) ---
+
+// ============================
+// 👷 FUNCIONES DE TÉCNICOS
+// ============================
+function formatearFechaTecnico(ts) {
+  if (!ts) return "Sin actualización";
+  const f = new Date(ts);
+  const dd = String(f.getDate()).padStart(2, "0");
+  const mm = String(f.getMonth() + 1).padStart(2, "0");
+  const yyyy = f.getFullYear();
+  const hh = String(f.getHours()).padStart(2, "0");
+  const mi = String(f.getMinutes()).padStart(2, "0");
+  const ss = String(f.getSeconds()).padStart(2, "0");
+  return `${dd}/${mm}/${yyyy} ${hh}:${mi}:${ss}`;
+}
+
+function obtenerEstadoTecnico(timestamp, activo) {
+  if (activo === false) return "Detenido";
+  if (!timestamp) return "Sin señal";
+
+  const diff = Date.now() - timestamp;
+  const cincoMin = 5 * 60 * 1000;
+
+  if (diff > cincoMin) return "Sin señal";
+
+  return "Activo";
+}
+
+function colorEstadoTecnico(estado) {
+  if (estado === "Activo") return "#16a34a";     // verde
+  if (estado === "Sin señal") return "#f59e0b";  // naranja
+  if (estado === "Detenido") return "#6b7280";   // gris
+  return "#6b7280";
+}
+
+function crearIconoTecnico(tecnico, estado) {
+  const color = colorEstadoTecnico(estado);
+
+  const nombreBase = (tecnico.nombre || tecnico.usuario || "").toUpperCase();
+
+  let emoji = "👷"; // por defecto
+  if (nombreBase.startsWith("REP_")) {
+    emoji = "🚚";
+  } else if (nombreBase.startsWith("REC_")) {
+    emoji = "👷";
+  }
+
+  return L.divIcon({
+    className: "tecnico-icon",
+    html: `
+      <div style="
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        width:40px;
+        height:40px;
+        border-radius:50%;
+        background:white;
+        border:3px solid ${color};
+        box-shadow:0 0 8px rgba(0,0,0,0.35);
+        font-size:20px;
+      ">${emoji}</div>
+    `,
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -18]
+  });
+}
+
+function obtenerContratistaTecnico(tecnico) {
+  const base = (tecnico.id || tecnico.nombre || tecnico.usuario || "").toUpperCase();
+
+  if (base.includes("_LAR_")) return "LARI";
+  if (base.includes("_COB_")) return "COBRA";
+  if (base.includes("_DOM_")) return "DOMINION";
+  if (base.includes("_PA_")) return "PA";
+  if (base.includes("_INM_")) return "INMEL";
+
+  return "SIN ASIGNAR";
+}
+
+function refrescarListaTecnicos() {
+  const input = document.getElementById("buscarTecnicoInput");
+  const filtroEstado = document.getElementById("filtroEstadoTecnico");
+  const filtroContratista = document.getElementById("filtroContratistaTecnico");
+  const lista = document.getElementById("listaTecnicosFiltrados");
+  const contador = document.getElementById("contadorTecnicos");
+
+  if (!input || !filtroEstado || !filtroContratista || !lista || !contador) return;
+
+  const texto = input.value.trim().toLowerCase();
+  const estadoSeleccionado = filtroEstado.value;
+  const contratistaSeleccionada = filtroContratista.value;
+
+  lista.innerHTML = "";
+
+  const items = Object.entries(tecnicosData)
+  .filter(([id, tecnico]) => tecnico && typeof tecnico === "object")
+  .map(([id, tecnico]) => {
+    const estado = obtenerEstadoTecnico(tecnico.timestamp, tecnico.activo);
+    const contratista = obtenerContratistaTecnico(tecnico);
+    return { id, tecnico, estado, contratista };
+  })
+    .filter(({ tecnico, estado, contratista }) => {
+      	const nombre = (tecnico.nombre || "").toLowerCase();
+	const usuario = (tecnico.usuario || "").toLowerCase();
+	const idTecnico = (tecnico.id || "").toLowerCase();
+
+const cumpleTexto =
+  !texto ||
+  nombre.includes(texto) ||
+  usuario.includes(texto) ||
+  idTecnico.includes(texto);
+
+      const cumpleEstado =
+        estadoSeleccionado === "todos" || estado === estadoSeleccionado;
+
+      const cumpleContratista =
+        contratistaSeleccionada === "todos" || contratista === contratistaSeleccionada;
+
+      return cumpleTexto && cumpleEstado && cumpleContratista;
+    })
+    .sort((a, b) => (a.tecnico.nombre || a.id).localeCompare(b.tecnico.nombre || b.id));
+
+  contador.textContent = `${items.length} técnico(s)`;
+
+  if (items.length === 0) {
+    lista.innerHTML = `<div class="list-group-item text-muted">Sin resultados</div>`;
+    return;
+  }
+
+  items.forEach(({ id, tecnico, estado, contratista }) => {
+    const color = colorEstadoTecnico(estado);
+
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "list-group-item list-group-item-action text-start";
+    item.innerHTML = `
+      <div><b>${tecnico.nombre || id}</b></div>
+      <div class="small text-muted">Usuario: ${tecnico.usuario || "-"}</div>
+      <div class="small">
+        <span style="color:${color}; font-weight:600;">${estado}</span> · ${contratista}
+      </div>
+    `;
+
+    item.onclick = () => {
+      if (tecnico.lat != null && tecnico.lon != null) {
+        map.setView([tecnico.lat, tecnico.lon], 18, { animate: true });
+
+        if (!tecnicosVisible) {
+          map.addLayer(capaTecnicos);
+          tecnicosVisible = true;
+          if (btnTecnicos) btnTecnicos.textContent = "❌ Ocultar técnicos";
+        }
+
+        if (markersTecnicos[id]) {
+          markersTecnicos[id].openPopup();
+        }
+      }
+    };
+
+    lista.appendChild(item);
+  });
+}
+
+// 📏 DISTANCIA (metros)
+function distancia(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1 * Math.PI / 180) *
+    Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) ** 2;
+
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// 📍 REGISTRAR PUNTOS DE COMPARACIÓN
+function registrarComparacion(lat, lon, tipo, detalle = "") {
+  if (!modoComparar) return;
+
+  puntosComparar.push({ lat, lon });
+
+  const texto = detalle ? `📍 ${tipo}: ${detalle}` : `📍 ${tipo}`;
+
+  L.marker([lat, lon])
+    .bindTooltip(texto, { permanent: true })
+    .addTo(capaComparacion);
+
+  if (puntosComparar.length === 2) {
+    const [a, b] = puntosComparar;
+    const d = distancia(a.lat, a.lon, b.lat, b.lon);
+
+    L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {
+      color: "red",
+      weight: 3,
+      dashArray: "5,5"
+    })
+      .bindPopup(`📏 Distancia: <b>${d.toFixed(1)} m</b>`)
+      .addTo(capaComparacion);
+
+    puntosComparar = [];
+  }
+}
+// --- FUNCION GENERAL PARA BUSCAR CERCANOS ---
+function obtenerCercanos(lat, lon, max = 5) {
+  const limite = parseFloat(document.getElementById("radioInput").value) || 20;
+  const distancias = datos.map(d => ({
+    ...d,
+    dist: distancia(lat, lon, d.lat, d.lon)
+  }));
+  distancias.sort((a, b) => a.dist - b.dist);
+  return distancias.filter(d => d.dist < limite).slice(0, max);
+}
+
+// --- Limpiar markers cercanos previos ---
+function limpiarCercanos() {
+  cercanosMarkers.forEach(m => map.removeLayer(m));
+  cercanosMarkers = [];
+}
+
+// --- BUSCAR SUMINISTRO ---
+function buscarSuministro() {
+  if (!datosListos) { resultado.textContent="⚠️ Espera a que termine la carga."; return; }
+  const num = searchBox.value.trim();
+  const encontrado = datos.find(d => d.cliente === num);
+  const lista = document.getElementById("cercanos");
+  lista.innerHTML = "";
+  limpiarCercanos();
+
+  if (encontrado) {
+  ultimoEncontro = encontrado;
+  const alimCd = mapaClientes[encontrado.cliente] || "No disponible";
+  resultado.innerHTML = `✅ Encontrado CLIENTE <b>${encontrado.cliente}</b><br>
+                         📡 <b>${alimCd}<br>
+                         🗂️ ${encontrado.ut}`;
+
+    verEnGoogle.style.display = "inline";
+    actualizarMapa(encontrado.lat, encontrado.lon, encontrado);
+    mostrarAtenciones(encontrado.cliente);
+
+    // mostrar cercanos
+    const cercanos = obtenerCercanos(encontrado.lat, encontrado.lon);
+    cercanos.forEach(c => {
+  const alimCdCercano = mapaClientes[c.cliente] || "No disponible";
+  const li = document.createElement("li");
+  li.className = "list-group-item";
+  li.innerHTML = `
+    <b>${c.cliente}</b><br>
+    📡 <span class="text-primary">${alimCdCercano}</span><br>
+    📏 ${c.dist.toFixed(1)} m
+  `;
+  lista.appendChild(li);
+
+  // marcador en el mapa
+  const m = L.circleMarker([c.lat, c.lon], { radius: 6, color: "red" }).addTo(map);
+  m.bindTooltip(`
+    Cliente: ${c.cliente}<br>
+    ALIM CD: ${alimCdCercano}<br>
+    Distancia: ${c.dist.toFixed(1)}m
+  `);
+  cercanosMarkers.push(m);
+});
+  } else {
+    resultado.textContent = "❌ Suministro no encontrado";
+    verEnGoogle.style.display = "none";
+  }
+}
+
+// --- BUSCAR SED ---
+function buscarSED() {
+  const nombre = searchSED.value.trim().toUpperCase();
+  const encontrado = sedDatos.find(s => s.sed === nombre);
+  const lista = document.getElementById("cercanosSED");
+  lista.innerHTML = "";
+  limpiarCercanos();
+  if(marker) map.removeLayer(marker);
+
+  if (encontrado) {
+    ultimaSED = encontrado;
+
+    // 🟡 Mostrar resultado con alimentador al costado
+    const alimTexto = encontrado.alim ? ` (${encontrado.alim})` : "";
+    resultadoSED.innerHTML = `✅ Encontrado SED <b>${encontrado.sed}</b>${alimTexto}`;
+    verEnGoogleSED.style.display = "inline";
+
+// --- Botón para ver detalle de SED ---
+let btnDetalle = document.getElementById("btnDetalleSED");
+if (!btnDetalle) {
+  btnDetalle = document.createElement("button");
+  btnDetalle.id = "btnDetalleSED";
+  btnDetalle.className = "btn btn-outline-secondary btn-sm mb-3 ms-2";
+  btnDetalle.textContent = "🔍 Detalle SED";
+  btnDetalle.onclick = () => mostrarDetalleSED(encontrado.sed);
+  resultadoSED.insertAdjacentElement("afterend", btnDetalle);
+} else {
+  btnDetalle.onclick = () => mostrarDetalleSED(encontrado.sed);
+  btnDetalle.style.display = "inline";
+}
+    marker = L.marker([encontrado.lat, encontrado.lon],{title:"SED "+encontrado.sed}).addTo(map);
+    marker.bindTooltip(`SED: ${encontrado.sed}<br>UT: ${encontrado.ut}`).openTooltip();
+    map.setView([encontrado.lat, encontrado.lon], 17);
+marker.on("click", () => {
+  registrarComparacion(
+    encontrado.lat,
+    encontrado.lon,
+    "SED",
+    encontrado.sed
+  );
+});
+
+
+    // mostrar cercanos a la SED
+    const cercanos = obtenerCercanos(encontrado.lat, encontrado.lon);
+    cercanos.forEach(c => {
+  const alimCdCercano = mapaClientes[c.cliente] || "No disponible";
+  const li = document.createElement("li");
+  li.className = "list-group-item";
+  li.innerHTML = `
+    <b>${c.cliente}</b><br>
+    📡 <span class="text-primary">${alimCdCercano}</span><br>
+    📏 ${c.dist.toFixed(1)} m
+  `;
+  lista.appendChild(li);
+
+  // marcador en el mapa con tooltip
+  const m = L.circleMarker([c.lat, c.lon], {
+    radius: 6,
+    color: "red",
+    weight: 1.5,
+    fillOpacity: 0.7
+  }).addTo(map);
+
+  m.bindTooltip(`
+    <b>Cliente:</b> ${c.cliente}<br>
+    <b>ALIM CD:</b> ${alimCdCercano}<br>
+    <b>Distancia:</b> ${c.dist.toFixed(1)}m
+  `);
+
+  cercanosMarkers.push(m);
+});
+  } else {
+    resultadoSED.textContent = "❌ SED no encontrada";
+    verEnGoogleSED.style.display = "none";
+  }
+}
+
+// --- BUSCAR POR COORDENADAS ---
+function buscarPorCoordenadas() {
+  const valor = coordInput.value.trim();
+  const partes = valor.split(",");
+  const lista = document.getElementById("cercanosCoord");
+  lista.innerHTML = "";
+  limpiarCercanos();
+  if(marker) map.removeLayer(marker);
+
+  if (partes.length === 2) {
+    const lat = parseFloat(partes[0]);
+    const lon = parseFloat(partes[1]);
+    if (!isNaN(lat) && !isNaN(lon)) {
+      resultadoCoord.textContent = "✅ Coordenadas válidas";
+      marker = L.marker([lat, lon],{title:"Ubicación"}).addTo(map);
+      map.setView([lat, lon], 17);
+
+      const cercanos = obtenerCercanos(lat, lon);
+      cercanos.forEach(c => {
+  const alimCdCercano = mapaClientes[c.cliente] || "No disponible";
+
+  // 🧾 agregar a la lista
+  const li = document.createElement("li");
+  li.className = "list-group-item";
+  li.innerHTML = `
+    <b>${c.cliente}</b><br>
+    📡 <span class="text-primary">${alimCdCercano}</span><br>
+    📏 ${c.dist.toFixed(1)} m
+  `;
+  lista.appendChild(li);
+
+  // 📍 marcador con tooltip en el mapa
+  const m = L.circleMarker([c.lat, c.lon], {
+    radius: 6,
+    color: "red",
+    weight: 1.5,
+    fillOpacity: 0.7
+  }).addTo(map);
+
+  m.bindTooltip(`
+    <b>Cliente:</b> ${c.cliente}<br>
+    <b>ALIM CD:</b> ${alimCdCercano}<br>
+    <b>Distancia:</b> ${c.dist.toFixed(1)}m
+  `);
+
+  cercanosMarkers.push(m);
+});
+      return;
+    }
+  }
+  resultadoCoord.textContent = "❌ Coordenadas inválidas";
+}
+// --- TOGGLE PANEL ATENCIONES ---
+// --- TOGGLE PANEL HERRAMIENTAS ---
+const btnHerramientas = document.getElementById("toggleHerramientasBtn");
+const panelHerramientas = document.getElementById("panelHerramientas");
+
+btnHerramientas.addEventListener("click", () => {
+  panelHerramientas.classList.toggle("visible");
+
+  if (panelHerramientas.classList.contains("visible")) {
+    btnHerramientas.textContent = "❌ Cerrar";
+    btnHerramientas.classList.remove("btn-primary");
+    btnHerramientas.classList.add("btn-danger");
+  } else {
+    btnHerramientas.textContent = "🛠️ Herramientas";
+    btnHerramientas.classList.remove("btn-danger");
+    btnHerramientas.classList.add("btn-primary");
+  }
+});
+const btnAtenciones = document.getElementById("toggleAtencionesBtn");
+const panelAtenciones = document.getElementById("panelAtenciones");
+
+btnAtenciones.addEventListener("click", () => {
+  panelAtenciones.classList.toggle("visible");
+
+  if (panelAtenciones.classList.contains("visible")) {
+    btnAtenciones.textContent = "❌ Cerrar";
+    btnAtenciones.classList.remove("btn-secondary");
+    btnAtenciones.classList.add("btn-danger");
+  } else {
+    btnAtenciones.textContent = "📋 Atenciones";
+    btnAtenciones.classList.remove("btn-danger");
+    btnAtenciones.classList.add("btn-secondary");
+  }
+});
+
+// ============================
+// 🔹 CARGAR ARCHIVO SED_CLIENTES
+// ============================
+let sedClientes = [];
+
+fetch("https://dl.dropboxusercontent.com/scl/fi/z8sr9bae1ds4myo7dmbni/SED_CLIENTES.csv?rlkey=3d7xy5746v3a3lpemiorp7sj0&st=bcf3izrn")
+  .then(r => r.text())
+  .then(texto => {
+    const lineas = texto.trim().split(/\r?\n/);
+    lineas.slice(1).forEach(l => {
+      const cols = l.split(",");
+      if (cols.length >= 3) {
+        sedClientes.push({
+          sed: cols[0].trim().toUpperCase(),
+          llave: cols[1].trim(),
+          clientes: parseInt(cols[2]) || 0
+        });
+      }
+    });
+    console.log("✅ Archivo SED_CLIENTES cargado:", sedClientes.length, "registros");
+  })
+  .catch(err => console.error("❌ Error al cargar SED_CLIENTES:", err));
+
+
+// ============================
+// 🔹 MOSTRAR DETALLE DE UNA SED
+// ============================
+function mostrarDetalleSED(nombreSED) {
+  const modal = new bootstrap.Modal(document.getElementById("detalleSEDModal"));
+  const tabla = document.getElementById("tablaDetalleSED");
+  const titulo = document.getElementById("detalleSEDNombre");
+  const totalDiv = document.getElementById("totalClientesSED");
+
+  tabla.innerHTML = "";
+  totalDiv.textContent = "";
+  titulo.textContent = "SED: " + nombreSED;
+
+  const registros = sedClientes.filter(s => s.sed === nombreSED);
+  if (registros.length === 0) {
+    tabla.innerHTML = `<tr><td colspan="2" class="text-muted">Sin información disponible</td></tr>`;
+    modal.show();
+    return;
+  }
+
+  let total = 0;
+  registros.forEach(r => {
+    total += r.clientes;
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${r.llave}</td><td>${r.clientes}</td>`;
+    tabla.appendChild(tr);
+  });
+
+  totalDiv.textContent = `Total de clientes: ${total}`;
+  modal.show();
+}
+// Actualizar etiqueta visual del radio
+const radioInput = document.getElementById("radioInput");
+const radioLabel = document.getElementById("radioLabel");
+
+radioInput.addEventListener("input", () => {
+  radioLabel.textContent = radioInput.value;
+});
+function cambiarModoBusqueda() {
+  const modo = document.getElementById("modoBusqueda").value;
+  document.getElementById("bloqueSuministro").style.display = (modo === "suministro") ? "block" : "none";
+  document.getElementById("bloqueSED").style.display = (modo === "sed") ? "block" : "none";
+  document.getElementById("bloqueCoord").style.display = (modo === "coordenadas") ? "block" : "none";
+}
+
+function exportarAtencionesExcel() {
+  if (!clienteActualAtenciones) {
+    alert("No hay suministro seleccionado");
+    return;
+  }
+
+  const filas = atenciones
+    .filter(a => a.cliente === clienteActualAtenciones)
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  if (filas.length === 0) {
+    alert("Este suministro no tiene atenciones");
+    return;
+  }
+
+  let csv = "Ticket;Tipo;Fecha;Alimentador;SED;Fuente\n";
+
+  filas.forEach(a => {
+    csv += `"${a.ticket}";"${a.tipo}";"${a.fecha}";"${a.alim}";"${a.sed}";"${a.fuente}"\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `Atenciones_${clienteActualAtenciones}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+function copiarSAP(sap) {
+  navigator.clipboard.writeText(sap).then(() => {
+    alert("✅ SAP copiado: " + sap);
+  });
+}
+function filtrarSAP() {
+  const desde = document.getElementById("sapDesde").value;
+  const hasta = document.getElementById("sapHasta").value;
+
+  capaSAP.clearLayers();
+
+  datos.forEach(d => {
+    const info = mapaSAP[d.cliente];
+    if (!info) return;
+
+    if (desde && info.fechaRegistro < desde) return;
+    if (hasta && info.fechaRegistro > hasta) return;
+
+    const marker = L.marker([d.lat, d.lon], { icon: iconoSAP })
+      .bindPopup(`💡 SAP ${info.sap}`);
+
+    capaSAP.addLayer(marker);
+  });
+
+  if (!sapVisible) {
+    map.addLayer(capaSAP);
+    sapVisible = true;
+    btnSAP.textContent = "❌ Ocultar SAP";
+  }
+}
+
+function escucharTecnicosTiempoReal() {
+  if (!window.dbFirebase || !window.refFirebase || !window.onValueFirebase) {
+    console.error("Firebase todavía no está cargado");
+    return;
+  }
+
+  const tecnicosRef = window.refFirebase(window.dbFirebase, "tecnicos");
+
+  window.onValueFirebase(tecnicosRef, (snapshot) => {
+    const data = snapshot.val() || {};
+	tecnicosData = data;
+    const idsActuales = new Set(Object.keys(data));
+
+    // Eliminar marcadores que ya no estén en la base
+    Object.keys(markersTecnicos).forEach(id => {
+      if (!idsActuales.has(id)) {
+        capaTecnicos.removeLayer(markersTecnicos[id]);
+        delete markersTecnicos[id];
+      }
+    });
+
+    Object.entries(data).forEach(([id, tecnico]) => {
+  if (!tecnico || typeof tecnico !== "object") return;
+  if (tecnico.lat == null || tecnico.lon == null) return;
+
+  const estado = obtenerEstadoTecnico(tecnico.timestamp, tecnico.activo);
+
+  const popup = `
+    <b>👷 ${tecnico.nombre || id}</b><br>
+    Usuario: ${tecnico.usuario || "-"}<br>
+    Estado: <b>${estado}</b><br>
+    Última actualización: ${formatearFechaTecnico(tecnico.timestamp)}
+  `;
+
+  if (markersTecnicos[id]) {
+    markersTecnicos[id].setLatLng([tecnico.lat, tecnico.lon]);
+    markersTecnicos[id].setIcon(crearIconoTecnico(tecnico, estado));
+    markersTecnicos[id].setPopupContent(popup);
+  } else {
+    const markerTecnico = L.marker([tecnico.lat, tecnico.lon], {
+      icon: crearIconoTecnico(tecnico, estado),
+      title: tecnico.nombre || id
+    }).bindPopup(popup);
+
+    markersTecnicos[id] = markerTecnico;
+    capaTecnicos.addLayer(markerTecnico);
+  }
+});
+	refrescarListaTecnicos();
+  });
+}
+
+
+window.addEventListener("firebase-listo", () => {
+  console.log("✅ Firebase listo");
+  escucharTecnicosTiempoReal();
+});
+
+</script>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+  const firebaseConfig = {
+  apiKey: "AIzaSyCNZD_oTI7jC_7rfHZ-XGRaxjhFz8aODD4",
+  authDomain: "ubicacionesreal.firebaseapp.com",
+  databaseURL: "https://ubicacionesreal-default-rtdb.firebaseio.com",
+  projectId: "ubicacionesreal",
+  storageBucket: "ubicacionesreal.firebasestorage.app",
+  messagingSenderId: "8523717990",
+  appId: "1:8523717990:web:57cd5d30146471a8687ca7"
+};
+
+  const appFirebase = initializeApp(firebaseConfig);
+  const dbFirebase = getDatabase(appFirebase);
+
+  window.dbFirebase = dbFirebase;
+  window.refFirebase = ref;
+  window.onValueFirebase = onValue;
+
+  window.dispatchEvent(new Event("firebase-listo"));
+</script>
+
+<!-- MODAL DETALLE SED -->
+<div class="modal fade" id="detalleSEDModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-warning">
+        <h5 class="modal-title">🔍 Detalle de SED</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <h6 id="detalleSEDNombre" class="text-primary mb-3"></h6>
+        <table class="table table-sm table-striped">
+          <thead>
+            <tr><th>Llave</th><th>Clientes</th></tr>
+          </thead>
+          <tbody id="tablaDetalleSED"></tbody>
+        </table>
+        <div id="totalClientesSED" class="fw-bold text-end"></div>
+      </div>
+</div>
+</div>
+</div>
+</div>
+</body>
+</html>
