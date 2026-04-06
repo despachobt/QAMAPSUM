@@ -430,7 +430,7 @@ document.getElementById("btnSED").addEventListener("click", () => {
 const usuarios = [{ user: "despachobt", pass: "Pluz2025" }];
 
 function login() {
- alert("botón sí está funcionando");
+  alert("sí está entrando a login()");
   const u = document.getElementById("user").value.trim();
   const p = document.getElementById("pass").value.trim();
   const loginMsg = document.getElementById("loginMsg");
@@ -441,7 +441,6 @@ function login() {
   loginMsg.textContent = ok ? "" : "❌ Usuario o contraseña incorrectos";
   if (ok) loginScreen.style.display = "none";
 }
-
 const urls = [
   {nombre:"NORTE CHICO",url:"https://dl.dropboxusercontent.com/scl/fi/gq78aaeeowpllmk6aq6u8/NORTE-CHICO.csv?rlkey=amoh5m764nbkoobv8tggbbmhb"},
   {nombre:"COLONIAL",url:"https://dl.dropboxusercontent.com/scl/fi/mo1wrl48ky5v74l3ybfpd/COLONIAL.csv?rlkey=jhcfg302k4re8lnp5aya8o02n"},
