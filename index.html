@@ -430,22 +430,29 @@ document.getElementById("btnSED").addEventListener("click", () => {
 const usuarios = [{ user: "despachobt", pass: "Pluz2025" }];
 
 function login() {
-  alert("sí está entrando a login()");
-  const u = document.getElementById("user").value.trim();
-  const p = document.getElementById("pass").value.trim();
-  const loginMsg = document.getElementById("loginMsg");
-  const loginScreen = document.getElementById("loginScreen");
-
-  const ok = usuarios.find(x => x.user === u && x.pass === p);
-
-  loginMsg.textContent = ok ? "" : "❌ Usuario o contraseña incorrectos";
-  if (ok) loginScreen.style.display = "none";
+  document.getElementById("loginMsg").textContent = "";
+  document.getElementById("loginScreen").style.display = "none";
 }
 const urls = [
   {nombre:"NORTE CHICO",url:"https://dl.dropboxusercontent.com/scl/fi/gq78aaeeowpllmk6aq6u8/NORTE-CHICO.csv?rlkey=amoh5m764nbkoobv8tggbbmhb"},
   {nombre:"COLONIAL",url:"https://dl.dropboxusercontent.com/scl/fi/mo1wrl48ky5v74l3ybfpd/COLONIAL.csv?rlkey=jhcfg302k4re8lnp5aya8o02n"},
   {nombre:"PANAMERICANA",url:"https://dl.dropboxusercontent.com/scl/fi/qpt0c6dqyhututunxgby5/PANAMERICANA.csv?rlkey=gtkcg709xhcohqdu70v8fzo16"}
 ];
+const progreso = document.getElementById("progreso");
+const progresoBox = document.getElementById("progresoBox");
+const sidebar = document.getElementById("sidebar");
+
+const resultado = document.getElementById("resultado");
+const verEnGoogle = document.getElementById("verEnGoogle");
+const searchBox = document.getElementById("searchBox");
+
+const searchSED = document.getElementById("searchSED");
+const resultadoSED = document.getElementById("resultadoSED");
+const verEnGoogleSED = document.getElementById("verEnGoogleSED");
+
+const coordInput = document.getElementById("coordInput");
+const resultadoCoord = document.getElementById("resultadoCoord");
+	
 // ============================
 // ============================
 // 🎨 COLORES POR CONTRATISTA
@@ -508,6 +515,7 @@ const zonaAContratista = {
 };
 function actualizarProgreso() {
   cargados++;
+console.log("cargados:", cargados, "de", urls.length);
   const bar = document.getElementById("progress-bar");
   const porcentaje = Math.round((cargados / urls.length) * 100);
 
@@ -548,12 +556,13 @@ urls.forEach(f=>{
     li.className="list-group-item";
     li.textContent=`${f.nombre}: ${lineas.length} filas cargadas`;
     progreso.appendChild(li);
-  }).catch(()=>{
-    const li=document.createElement("li");
-    li.className="list-group-item text-danger";
-    li.textContent="❌ Error al cargar "+f.nombre;
-    progreso.appendChild(li);
-  });
+  }).catch((err)=>{
+  console.error("Error cargando", f.nombre, err);
+  const li = document.createElement("li");
+  li.className = "list-group-item text-danger";
+  li.textContent = "❌ Error al cargar " + f.nombre;
+  progreso.appendChild(li);
+});
 });
 
 // Cargar SEDs (inicialmente ocultas)
